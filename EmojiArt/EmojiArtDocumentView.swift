@@ -45,7 +45,7 @@ struct EmojiArtDocumentView: View {
                             .onTapGesture {
                                 selectedEmojis.toggleMatched(emoji.id)
                             }
-                            .simultaneousGesture(isSelected(emoji) ? emojiPanGesture(emoji: emoji) : nil)
+                            .simultaneousGesture(emojiPanGesture(emoji: emoji))
                     }
                 }
             }
@@ -68,22 +68,6 @@ struct EmojiArtDocumentView: View {
                 .padding()
         }
 
-    }
-    
-    // MARK: - Emoji Selection
-    
-    @State private var selectedEmojis = Set<Int>()
-    
-    private func isSelected(_ emoji: EmojiArtModel.Emoji) -> Bool {
-        selectedEmojis.contains(emoji.id)
-    }
-    
-    private func deselectAllEmojis() {
-        selectedEmojis.removeAll()
-    }
-    
-    private func findEmojiFromID(_ id: Int) -> EmojiArtModel.Emoji? {
-        document.emojis.first(where: { $0.id == id })
     }
     
     // MARK: - Drag and Drop
@@ -116,7 +100,11 @@ struct EmojiArtDocumentView: View {
     // MARK: - Positioning/Sizing Emoji
     
     private func position(for emoji: EmojiArtModel.Emoji, in geometry: GeometryProxy) -> CGPoint {
-        let location = isSelected(emoji) ? (emoji.x + Int(emojiPanOffset.width), emoji.y + Int(emojiPanOffset.height)) : (emoji.x, emoji.y)
+        var location = (emoji.x, emoji.y)
+        if emojiPanOffset.groupToDrag.contains(emoji.id) {
+            location.0 += Int(emojiPanOffset.translation.width)
+            location.1 += Int(emojiPanOffset.translation.height)
+        }
         return convertFromEmojiCoordinates((location.0, location.1), in: geometry)
     }
     
@@ -194,10 +182,47 @@ struct EmojiArtDocumentView: View {
         }
     }
     
+    // MARK: - Emoji Selection
+    
+    @State private var selectedEmojis = Set<Int>()
+    
+    private func isSelected(_ emoji: EmojiArtModel.Emoji) -> Bool {
+        selectedEmojis.contains(emoji.id)
+    }
+    
+    private func deselectAllEmojis() {
+        selectedEmojis.removeAll()
+    }
+    
+    private func findEmojiFromID(_ id: Int) -> EmojiArtModel.Emoji? {
+        document.emojis.first(where: { $0.id == id })
+    }
+    
     // MARK: - Emoji Dragging
     
-    @GestureState private var emojiPanOffset: CGSize = CGSize.zero
+    @GestureState private var emojiPanOffset = DragGroup.allSelectedEmojis(Set<Int>(), CGSize.zero)
     
+    private enum DragGroup {
+        case singleEmoji(Int, CGSize)
+        case allSelectedEmojis(Set<Int>, CGSize)
+        
+        var groupToDrag: Set<Int> {
+            switch self {
+            case .singleEmoji(let id, _):
+                return [id]
+            case.allSelectedEmojis(let selectedEmojiIDS, _):
+                return selectedEmojiIDS
+            }
+        }
+        
+        var translation: CGSize {
+            switch self {
+            case .singleEmoji(_, let translation), .allSelectedEmojis(_, let translation):
+                return translation
+            }
+        }
+    }
+
     private func moveSelectedEmojis(by translation: CGSize) {
         selectedEmojis.forEach {
             if let emoji = findEmojiFromID($0) {
@@ -209,10 +234,18 @@ struct EmojiArtDocumentView: View {
     private func emojiPanGesture(emoji: EmojiArtModel.Emoji) -> some Gesture {
         DragGesture()
             .updating($emojiPanOffset) { latestDragGestureValue, emojiPanOffset, _ in
-                emojiPanOffset = latestDragGestureValue.translation / zoomScale
+                if isSelected(emoji) {
+                    emojiPanOffset = .allSelectedEmojis(selectedEmojis, latestDragGestureValue.translation / zoomScale)
+                } else {
+                    emojiPanOffset = .singleEmoji(emoji.id, latestDragGestureValue.translation / zoomScale)
+                }
             }
             .onEnded { finalDragGestureValue in
-                moveSelectedEmojis(by: finalDragGestureValue.translation / zoomScale)
+                if isSelected(emoji) {
+                    moveSelectedEmojis(by: finalDragGestureValue.translation / zoomScale)
+                } else {
+                    document.moveEmoji(emoji, by: finalDragGestureValue.translation / zoomScale)
+                }
             }
     }
     
