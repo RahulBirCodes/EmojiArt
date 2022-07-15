@@ -39,7 +39,7 @@ struct EmojiArtDocumentView: View {
                     ForEach(document.emojis) { emoji in
                         Text(emoji.text)
                             .border(.red, width: isSelected(emoji) ? 3 / emojiZoomScale: 0)
-                            .font(.system(size: fontSize(for: emoji)))
+                            .animatableSystemFont(size: fontSize(for: emoji))
                             .scaleEffect(isSelected(emoji) ? emojiZoomScale : zoomScale)
                             .position(position(for: emoji, in: geometry))
                             .onTapGesture {
@@ -67,7 +67,6 @@ struct EmojiArtDocumentView: View {
                 .disabled(selectedEmojis.isEmpty)
                 .padding()
         }
-
     }
     
     // MARK: - Drag and Drop
